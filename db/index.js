@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { Client } = require('pg');
 const client = new Client ('postgres://localhost:5432/juicebox_dev');
 
@@ -23,6 +24,32 @@ async function createUser({
 }
 
 
+async function updateUser(id, fields = {}) {
+    // build the set string
+    const setString = Object.keys(fields).map(
+        (key, index) => `"${ key }"=$${ index + 1 }`
+    ).join(', ');
+
+    // return early if this is called without fields
+    if (setString.length === 0) {
+    return;
+    }
+
+    try {
+        const { rows: [ user ] } = await client.query(`
+            UPDATE users
+            SET ${ setString }
+            WHERE id=${ id }
+            RETURNING *;
+        `, Object.values(fields));
+
+    return user;
+    } catch (error) {
+    throw error;
+    }
+}
+
+
 async function getUserByUsername(username) {
     try {
       const { rows: [user] } = await client.query(`
@@ -38,38 +65,14 @@ async function getUserByUsername(username) {
 }
 
 
-async function updateUser(id, fields = {}) {
-    const setString = Object.keys(fields).map(
-        (key, index) => `$"{ key }" = $${ index+1 }`
-    ).join(',');
-
-    if (setString.length === 0){
-        return;
-    }
-
-    try {
-        const result = await client.query(`
-        UPDATE users
-        SET ${ setString }
-        WHERE id=${ id }
-        RETURNING *;
-        `, Object.values(fields));
-
-        return result;
-    } catch(error) {
-        throw error;
-    }
-}
-
 async function getAllUsers() {
-    try{
+    try {
+        const { rows } = await client.query(`
+            SELECT id, username, name, location, active 
+            FROM users;
+        `);
 
-      const { rows } = await client.query(`
-      SELECT id, username, name, location, active
-      FROM users;
-      `); 
-
-      return rows;
+        return rows;
     } catch (error) {
         throw error;
     }
@@ -80,8 +83,8 @@ async function getUserById(userId) {
         const { rows: [ user ] } = await client.query(`
             SELECT id, username, name, location, active
             FROM users
-            WHERE id=${ userId };
-        `);
+            WHERE id=$1;
+        `, [userId]);
 
         if (!user) {
             return null
@@ -93,8 +96,9 @@ async function getUserById(userId) {
     } catch (error) {
         throw error;
     }
-
 }
+
+
 
 async function createPost({
     authorId,
@@ -110,7 +114,7 @@ async function createPost({
       `, [authorId, title, content]);
 
       const tagList = await createTags(tags);
-      return await addTagsToPosts(post.id, tagList);
+      return await addTagsToPost(post.id, tagList);
     }catch(error) {
         throw error;
     }
@@ -193,23 +197,20 @@ async function createTags(tagList) {
     }
 }
 
-async function addTagsToPosts(postId, tagList) {
+
+async function addTagsToPost(postId, tagList) {
     try {
-        const createPostTagPromises = tagList.map (
-            tag => createPostTag(postId, tag.id)
-        );
-        await Promise.all(createPosttagPromises);
-         
-        return await getPostById(postId)
-
+      const createPostTagPromises = tagList.map(
+        tag => createPostTag(postId, tag.id)
+      );
+  
+      await Promise.all(createPostTagPromises);
+  
+      return await getPostById(postId);
     } catch (error) {
-        throw error; 
+      throw error;
     }
-              
-}
-
-
-
+  }
 
 async function createPostTag(postId, tagId) {
     try{
@@ -269,7 +270,7 @@ async function getPostsByUser(userId) {
         SELECT *
         FROM posts
         WHERE "authorId"=$1;
-      `);
+      `,[userId]);
   
       return rows;
     } catch (error) {
@@ -336,6 +337,8 @@ module.exports = {
     createPost,
     updatePost,
     getAllPosts,
+    addTagsToPost,
     getPostsByUser,
+    getPostById,
     getUserByUsername
 }

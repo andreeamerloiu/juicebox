@@ -9,64 +9,64 @@ const {
    getUserById,
    createPost,
    updatePost,
-   getAllPosts,
-   getPostsByUser
+   getPostById,
+   getAllPosts
 } = require('./index');
 
 
-async function dropTables(){
-   try{
-     console.log("Starting to drop tables...")
+async function dropTables() {
+   try {
+       console.log("Starting to drop tables...");
 
-      await client.query(`
-      DROP TABLE IF EXISTS posts_tags;
-      DROP TABLE IF EXISTS post_tags;
-      DROP TABLE IF EXISTS tags;
-      DROP TABLE IF EXISTS posts;
-      DROP TABLE IF EXISTS users;
-      `);
+       await client.query(`
+           DROP TABLE IF EXISTS post_tags;
+           DROP TABLE IF EXISTS tags;
+           DROP TABLE IF EXISTS posts;
+           DROP TABLE IF EXISTS users;
+       `);
 
-      console.log("Finish dropping tables!");
+       console.log("Finished dropping tables!");
    } catch (error) {
-      console.error("Error dropping tables!");
-      throw error;
+       console.error("Error dropping tables!");
+       throw error;
    }
 }
 
-async function createTables(){
-   try{
-      await client.query(`
-      CREATE TABLE users (
-         id SERIAL PRIMARY KEY,
-         username varchar(255) UNIQUE NOT NULL,
-         password varchar(255) NOT NULL,
-         name VARCHAR(255) NOT NULL,
-         location VARCHAR(255) NOT NULL,
-         active BOOLEAN DEFAULT true
-      );
-      CREATE TABLE posts (
-         id SERIAL PRIMARY KEY,
-         "authorId" INTEGER REFERENCES users(id),
-         title varchar(255) NOT NULL, 
-         content TEXT NOT NULL,
-         active BOOLEAN DEFAULT true
-       );
+async function createTables() {
+   try {
+       console.log("Starting to build tables...");
 
-      CREATE TABLE tags (
-         id SERIAL PRIMARY KEY,
-         name VARCHAR(255) UNIQUE NOT NULL
-     );
-     CREATE TABLE posts_tags (
-         "postId" INTEGER REFERENCES posts(id),
-         "tagId" INTEGER REFERENCES tags(id),
-         UNIQUE("postId", "tagId") 
-     );
-      `);
+       await client.query(`
+           CREATE TABLE users (
+               id SERIAL PRIMARY KEY,
+               username varchar(255) UNIQUE NOT NULL,
+               password varchar(255) NOT NULL,
+               name VARCHAR(255) NOT NULL,
+               location VARCHAR(255) NOT NULL,
+               active BOOLEAN DEFAULT true
+           );
+           CREATE TABLE posts (
+               id SERIAL PRIMARY KEY,
+               "authorId" INTEGER REFERENCES users(id) NOT NULL,
+               title VARCHAR(255) NOT NULL,
+               content TEXT NOT NULL,
+               active BOOLEAN DEFAULT true
+           );
+           CREATE TABLE tags (
+               id SERIAL PRIMARY KEY,
+               name VARCHAR(255) UNIQUE NOT NULL
+           );
+           CREATE TABLE post_tags (
+               "postId" INTEGER REFERENCES posts(id),
+               "tagId" INTEGER REFERENCES tags(id),
+               UNIQUE("postId", "tagId") 
+           );
+       `);
 
-      console.log("Finish building tables!");
+       console.log("Finished building tables!");
    } catch (error) {
-      console.error("Error building tables!")
-      throw error;
+       console.error("Error building tables!");
+       throw error;
    }
 }
 async function createInitialUsers() {
@@ -124,7 +124,7 @@ async function createInitialPosts() {
            title: "how does it work",
            content: "damn this does work",
            tags: ["#happy", "#youcandoanything", "#canmandoeverything"]
-       })
+       });
 
    } catch (error) {
        throw error;
@@ -133,18 +133,32 @@ async function createInitialPosts() {
 
 async function getPostsByTagName(tagName) {
    try {
-      const {row: postIds} = await client.query(`
+      const { rows: postIds } = await client.query(`
       SELECT posts.id
       FROM posts
-      JOIN post_tags ON posts.id=post_tags."posyId"
-      JOIN tags ON tags.id=posy_tags."tagId"
+      JOIN post_tags ON posts.id=post_tags."postId"
+      JOIN tags ON tags.id=post_tags."tagId"
       WHERE tags.name=$1;
-      `, [tagName]);
-
+    `, [tagName]);
+      console.log(postIds, 'THIS IS THE POST IDS')
       return await Promise.all(postIds.map(
-         post => getPostById (post.id)
+         post => getPostById(post.id)
       ));
    } catch (error) {
+      throw error;
+   }
+}
+
+async function rebuildDB() {
+   try{
+      client.connect();
+
+      await dropTables();
+      await createTables();
+      await createInitialUsers();
+      await createInitialPosts();
+   } catch (error) {
+      console.log("Error doing rebuildDB ")
       throw error;
    }
 }
@@ -191,19 +205,7 @@ async function testDB() {
    } 
 }
 
-async function rebuildDB() {
-   try{
-      client.connect();
 
-      await dropTables();
-      await createTables();
-      await createInitialUsers();
-      await createInitialPosts();
-   } catch (error) {
-      console.log("Error doing rebuildDB ")
-      throw error;
-   }
-}
 
 
 rebuildDB()
